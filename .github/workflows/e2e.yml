@@ -1,0 +1,98 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly regression signal against the beta channel, gated on the image
+    # digest actually having changed since the last tested one.
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      record:
+        description: "Record mode: produce flow videos as artifacts"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+      digest: ${{ steps.check.outputs.digest }}
+    steps:
+      - name: Check whether a new beta image shipped
+        id: check
+        env:
+          LAST_TESTED_DIGEST: ${{ vars.LAST_TESTED_DIGEST }}
+        run: |
+          TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:music-assistant/server:pull" | jq -r .token)
+          DIGEST=$(curl -sI -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/music-assistant/server/manifests/beta" \
+            | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:"{print $2}')
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -n "$DIGEST" ] && [ "$DIGEST" = "$LAST_TESTED_DIGEST" ]; then
+            echo "beta digest unchanged ($DIGEST), skipping"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  e2e:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install chromium --with-deps
+      - name: Run specs
+        run: |
+          if [ "${{ inputs.record }}" = "true" ]; then
+            pnpm record
+          else
+            pnpm test
+          fi
+      - name: Upload recordings
+        if: inputs.record == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: recordings
+          path: recordings/
+      - name: Upload failure report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+
+  remember-digest:
+    # Persist the tested digest so the next scheduled run can skip when
+    # nothing new shipped.
+    needs: [gate, e2e]
+    if: github.event_name == 'schedule' && needs.e2e.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Store tested digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.gate.outputs.digest }}
+        run: |
+          gh api -X PATCH "repos/${{ github.repository }}/actions/variables/LAST_TESTED_DIGEST" \
+            -f name=LAST_TESTED_DIGEST -f value="$DIGEST" \
+          || gh api -X POST "repos/${{ github.repository }}/actions/variables" \
+            -f name=LAST_TESTED_DIGEST -f value="$DIGEST"
