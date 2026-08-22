@@ -17,43 +17,25 @@ export type SpeakerStorage = Map<string, string>;
  * device (identity and long-term PSK live in storage).
  */
 export class Speaker {
-  readonly core: SendspinCore;
   readonly storage: SpeakerStorage;
   readonly pairingEvents: string[] = [];
 
+  private core: SendspinCore;
+  private readonly baseUrl: string;
+  private readonly name: string;
   private pinWaiters: Array<(pin: string) => void> = [];
   private lastPin: string | null = null;
   private finalizedResolve!: () => void;
   readonly finalized: Promise<void>;
 
   constructor(sendspinBaseUrl: string, name: string, storage?: SpeakerStorage) {
+    this.baseUrl = sendspinBaseUrl;
+    this.name = name;
     this.storage = storage ?? new Map();
-    const storageAdapter: StorageAdapter = {
-      getItem: (key: string) => this.storage.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        this.storage.set(key, value);
-      },
-    };
     this.finalized = new Promise((resolve) => {
       this.finalizedResolve = resolve;
     });
-    this.core = new SendspinCore({
-      baseUrl: sendspinBaseUrl,
-      clientName: name,
-      productName: "ma-e2e-test",
-      codecs: ["pcm"],
-      unpairedAccess: true,
-      storage: storageAdapter,
-      onPairing: (event: string) => {
-        this.pairingEvents.push(event);
-        if (event === "finalized") this.finalizedResolve();
-      },
-      onPairingPin: (pin: string | null) => {
-        if (!pin) return;
-        this.lastPin = pin;
-        for (const waiter of this.pinWaiters.splice(0)) waiter(pin);
-      },
-    });
+    this.core = this.buildCore();
   }
 
   async connect(): Promise<void> {
@@ -62,6 +44,13 @@ export class Speaker {
 
   disconnect(): void {
     this.core.disconnect();
+  }
+
+  /** Drop the connection and reconnect as the same device. */
+  async reconnect(): Promise<void> {
+    this.core.disconnect();
+    this.core = this.buildCore();
+    await this.core.connect();
   }
 
   get clientId(): string {
@@ -83,6 +72,32 @@ export class Speaker {
         clearTimeout(timer);
         resolve(pin);
       });
+    });
+  }
+
+  private buildCore(): SendspinCore {
+    const storageAdapter: StorageAdapter = {
+      getItem: (key: string) => this.storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        this.storage.set(key, value);
+      },
+    };
+    return new SendspinCore({
+      baseUrl: this.baseUrl,
+      clientName: this.name,
+      productName: "ma-e2e-test",
+      codecs: ["pcm"],
+      unpairedAccess: true,
+      storage: storageAdapter,
+      onPairing: (event: string) => {
+        this.pairingEvents.push(event);
+        if (event === "finalized") this.finalizedResolve();
+      },
+      onPairingPin: (pin: string | null) => {
+        if (!pin) return;
+        this.lastPin = pin;
+        for (const waiter of this.pinWaiters.splice(0)) waiter(pin);
+      },
     });
   }
 }

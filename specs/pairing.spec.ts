@@ -1,30 +1,37 @@
+import { waitForPlayerRegistered } from "../fixtures/api.js";
 import { seededStart } from "../fixtures/seed.js";
 import { Speaker } from "../fixtures/speaker.js";
 import { expect, test } from "../fixtures/test.js";
 
 const SPEAKER_NAME = "Living Room Speaker";
 
-test("pairing: dynamic PIN via the player picker", async ({ page, context, maServer }) => {
-  await seededStart(maServer, context);
+test("pairing: dynamic PIN via the player picker", async ({ context, maServer }) => {
+  // All setup happens before the page (and with it the recording) starts:
+  // seed the admin, connect the speaker, wait until the server registered it.
+  const token = await seededStart(maServer, context);
+  const speaker = new Speaker(maServer.sendspinBaseUrl, SPEAKER_NAME);
+  await speaker.connect();
+  await waitForPlayerRegistered(maServer.baseUrl, token, SPEAKER_NAME);
+
+  const page = await context.newPage();
   await page.goto(maServer.baseUrl);
   // The collapsed picker trigger carries aria-expanded; an open panel adds a
   // second "Select player: ..." button, so match on the expanded state.
   const pickerButton = page.getByRole("button", { name: /Select player/, expanded: false });
   await expect(pickerButton).toBeVisible({ timeout: 30_000 });
 
-  const speaker = new Speaker(maServer.sendspinBaseUrl, SPEAKER_NAME);
-  await speaker.connect();
+  // The app's initial player fetch excludes protocol players, so it only
+  // learns about the unpaired speaker from a player event. Bounce the
+  // speaker's connection to emit one now that the page is subscribed.
+  await speaker.reconnect();
+  await waitForPlayerRegistered(maServer.baseUrl, token, SPEAKER_NAME);
+  await page.waitForTimeout(1_000);
 
-  // The picker lists players awaiting setup; clicking such a player launches
-  // its setup flow. Server-side registration lags the client connect, so
-  // reopen the picker until the speaker's card shows up.
+  // The picker lists players awaiting setup; clicking one launches its
+  // setup flow.
+  await pickerButton.click();
   const speakerCard = page.locator("[data-player-id]").filter({ hasText: SPEAKER_NAME });
-  await expect(async () => {
-    await page.keyboard.press("Escape");
-    await expect(pickerButton).toBeVisible({ timeout: 3_000 });
-    await pickerButton.click();
-    await expect(speakerCard).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 45_000 });
+  await expect(speakerCard).toBeVisible({ timeout: 15_000 });
   await expect(speakerCard).toContainText("Setup required");
   await speakerCard.locator("button.player-select-action").click();
 

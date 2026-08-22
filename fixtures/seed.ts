@@ -8,8 +8,9 @@ export const ADMIN_PASSWORD = "e2e-password-123";
  * Seeded start: create the first admin user via POST /setup and inject the
  * returned token (plus a deterministic English locale) so the first page
  * load lands in the app already logged in, with no login screen.
+ * Returns the token for harness-side API calls.
  */
-export async function seededStart(server: MaServer, context: BrowserContext): Promise<void> {
+export async function seededStart(server: MaServer, context: BrowserContext): Promise<string> {
   const res = await fetch(`${server.baseUrl}/setup`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -28,4 +29,5 @@ export async function seededStart(server: MaServer, context: BrowserContext): Pr
     localStorage.setItem("frontend.settings.language", "en");
     localStorage.setItem("frontend.settings.migrated_to_user_prefs", "true");
   }, token);
+  return token;
 }
