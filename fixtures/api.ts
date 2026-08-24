@@ -43,16 +43,25 @@ export class WsApi {
   }
 }
 
+export interface PlayerSnapshot {
+  name?: string;
+  display_name?: string;
+  available?: boolean;
+  needs_setup?: boolean;
+}
+
 /**
- * Wait until a player with the given name is registered on the server.
- * Unpaired Sendspin clients are protocol players, so include those.
+ * Wait until a player with the given name is registered on the server and
+ * satisfies the optional predicate, then return its state. Unpaired Sendspin
+ * clients are protocol players, so those are included.
  */
 export async function waitForPlayerRegistered(
   baseUrl: string,
   token: string,
   name: string,
+  predicate?: (player: PlayerSnapshot) => boolean,
   timeoutMs = 60_000,
-): Promise<void> {
+): Promise<PlayerSnapshot> {
   const api = await WsApi.connect(baseUrl, token);
   try {
     const deadline = Date.now() + timeoutMs;
@@ -61,11 +70,12 @@ export async function waitForPlayerRegistered(
         return_protocol_players: true,
         return_unavailable: true,
       });
-      const players = (res.result ?? []) as Array<{ name?: string; display_name?: string }>;
-      if (players.some((p) => (p.name ?? p.display_name) === name)) return;
+      const players = (res.result ?? []) as PlayerSnapshot[];
+      const player = players.find((p) => (p.name ?? p.display_name) === name);
+      if (player && (!predicate || predicate(player))) return player;
       await new Promise((r) => setTimeout(r, 500));
     }
-    throw new Error(`player "${name}" not registered within ${timeoutMs}ms`);
+    throw new Error(`player "${name}" not in expected state within ${timeoutMs}ms`);
   } finally {
     api.close();
   }

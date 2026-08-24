@@ -13,6 +13,5 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     video: record ? "on" : "retain-on-failure",
     trace: "retain-on-failure",
-    launchOptions: record ? { slowMo: 400 } : {},
   },
 });

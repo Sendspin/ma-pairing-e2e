@@ -1,4 +1,5 @@
 import { waitForPlayerRegistered } from "../fixtures/api.js";
+import * as human from "../fixtures/human.js";
 import { seededStart } from "../fixtures/seed.js";
 import { Speaker } from "../fixtures/speaker.js";
 import { expect, test } from "../fixtures/test.js";
@@ -9,6 +10,7 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   // All setup happens before the page (and with it the recording) starts:
   // seed the admin, connect the speaker, wait until the server registered it.
   const token = await seededStart(maServer, context);
+  await human.installCursor(context);
   const speaker = new Speaker(maServer.sendspinBaseUrl, SPEAKER_NAME);
   await speaker.connect();
   await waitForPlayerRegistered(maServer.baseUrl, token, SPEAKER_NAME);
@@ -26,17 +28,20 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   await speaker.reconnect();
   await waitForPlayerRegistered(maServer.baseUrl, token, SPEAKER_NAME);
   await page.waitForTimeout(1_000);
+  await human.pause(page, 1_000);
 
   // The picker lists players awaiting setup; clicking one launches its
   // setup flow.
-  await pickerButton.click();
+  await human.click(page, pickerButton);
   const speakerCard = page.locator("[data-player-id]").filter({ hasText: SPEAKER_NAME });
   await expect(speakerCard).toBeVisible({ timeout: 15_000 });
   await expect(speakerCard).toContainText("Setup required");
-  await speakerCard.locator("button.player-select-action").click();
+  await human.pause(page, 1_200);
+  await human.click(page, speakerCard.locator("button.player-select-action"));
 
   const dialog = page.getByRole("dialog", { name: "Set up player" });
   await expect(dialog).toBeVisible();
+  await human.pause(page, 1_200);
 
   // The method-selection step is skipped by the server when the device
   // advertises only one usable method, so wait for either it or the PIN form.
@@ -44,42 +49,56 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   const pinField = dialog.getByLabel("PIN", { exact: true });
   await expect(methodRadio.or(pinField).first()).toBeVisible({ timeout: 30_000 });
   if (await methodRadio.isVisible()) {
-    await methodRadio.check();
-    await dialog.getByRole("button", { name: "Next" }).click();
+    await human.click(page, methodRadio);
+    await human.pause(page, 800);
+    await human.click(page, dialog.getByRole("button", { name: "Next" }));
   }
 
+  // The PIN shows on the speaker; the operator copies it into the dialog.
   const pin = await speaker.waitForPin();
   await expect(pinField).toBeVisible({ timeout: 30_000 });
-  await pinField.fill(pin);
-  await dialog.getByRole("button", { name: "Next" }).click();
+  await human.pause(page, 1_000);
+  await human.type(page, pinField, pin);
+  await human.pause(page, 600);
+  await human.click(page, dialog.getByRole("button", { name: "Next" }));
 
   await expect(dialog.getByText("All set!")).toBeVisible({ timeout: 30_000 });
-  await dialog.getByRole("button", { name: "Done" }).click();
+  await human.pause(page, 1_500);
+  await human.click(page, dialog.getByRole("button", { name: "Done" }));
 
-  // Proof layer 1: the paired speaker is now a selectable playback target.
-  await pickerButton.click();
+  // The paired speaker is now a selectable playback target.
+  await human.pause(page, 1_000);
+  await human.click(page, pickerButton);
   await expect(speakerCard).toBeVisible({ timeout: 15_000 });
   await expect(speakerCard).not.toContainText("Setup required");
-  await speakerCard.locator("button.player-select-action").click();
+  await human.pause(page, 1_200);
+  await human.click(page, speakerCard.locator("button.player-select-action"));
   await expect(
     page.getByRole("button", {
       name: new RegExp(`^Select player: ${SPEAKER_NAME}`),
       expanded: false,
     }),
   ).toBeVisible({ timeout: 15_000 });
+  await human.pause(page, 2_000);
 
-  // Proof layer 2: the speaker itself confirms and holds a long-term PSK.
+  // End of the recorded flow; the remaining checks are API/client-side.
+  await page.close();
+
+  // The speaker itself confirms the pairing and holds a long-term PSK.
   await speaker.finalized;
   expect(speaker.pairingPsk).toBeTruthy();
 
-  // Proof layer 3: a reconnect with the same identity/storage is admitted
-  // as already paired, with no new pairing round.
+  // A reconnect with the same identity/storage is admitted as already
+  // paired: no new pairing round, and the player comes back available.
   speaker.disconnect();
   const reconnected = new Speaker(maServer.sendspinBaseUrl, SPEAKER_NAME, speaker.storage);
   await reconnected.connect();
-  await pickerButton.click();
-  await expect(speakerCard).toBeVisible({ timeout: 15_000 });
-  await expect(speakerCard).not.toContainText("Setup required");
+  await waitForPlayerRegistered(
+    maServer.baseUrl,
+    token,
+    SPEAKER_NAME,
+    (p) => p.needs_setup === false && p.available === true,
+  );
   expect(reconnected.pairingEvents).toEqual([]);
   reconnected.disconnect();
 });
