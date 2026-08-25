@@ -8,6 +8,7 @@ test("onboarding: create the admin account", async ({ context, maServer }) => {
   // A fresh server redirects every page to the create-admin setup page.
   await page.goto(maServer.baseUrl);
   await expect(page.getByRole("heading", { name: "Welcome!" })).toBeVisible();
+  await human.centerCursor(page);
   await human.pause(page, 1_200);
 
   await human.type(page, page.getByLabel("Username"), "admin");

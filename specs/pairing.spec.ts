@@ -14,6 +14,8 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   const speaker = new Speaker(maServer.sendspinBaseUrl, SPEAKER_NAME);
   await speaker.connect();
   await waitForPlayerRegistered(maServer.baseUrl, token, SPEAKER_NAME);
+  // Let the speaker settle in before the recording starts.
+  await human.settle(10_000);
 
   const page = await context.newPage();
   await page.goto(maServer.baseUrl);
@@ -21,6 +23,7 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   // second "Select player: ..." button, so match on the expanded state.
   const pickerButton = page.getByRole("button", { name: /Select player/, expanded: false });
   await expect(pickerButton).toBeVisible({ timeout: 30_000 });
+  await human.centerCursor(page);
 
   // The app's initial player fetch excludes protocol players, so it only
   // learns about the unpaired speaker from a player event. Bounce the
@@ -28,7 +31,6 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   await speaker.reconnect();
   await waitForPlayerRegistered(maServer.baseUrl, token, SPEAKER_NAME);
   await page.waitForTimeout(1_000);
-  await human.pause(page, 1_000);
 
   // The picker lists players awaiting setup; clicking one launches its
   // setup flow.

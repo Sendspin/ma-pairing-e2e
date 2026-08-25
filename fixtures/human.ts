@@ -3,9 +3,29 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 /** Record mode: video capture, human pacing, visible cursor. */
 export const RECORD = !!process.env.RECORD;
 
+// A glide slow enough to follow with the eye, in small steps so the cursor
+// overlay redraws smoothly rather than jumping.
+const TRAVEL_MS = 640;
+const STEP_MS = 16;
+
+let position: { x: number; y: number } | null = null;
+
 /** Pause only in record mode, to give the viewer time to follow. */
 export async function pause(page: Page, ms: number): Promise<void> {
   if (RECORD) await page.waitForTimeout(ms);
+}
+
+/** Pause in record mode before the recorded page exists. */
+export async function settle(ms: number): Promise<void> {
+  if (RECORD) await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Start the pointer in the middle of the viewport, where a person would. */
+export async function centerCursor(page: Page): Promise<void> {
+  const size = page.viewportSize();
+  if (!RECORD || !size) return;
+  position = { x: Math.round(size.width / 2), y: Math.round(size.height / 2) };
+  await page.mouse.move(position.x, position.y);
 }
 
 /**
@@ -24,7 +44,7 @@ export async function click(page: Page, locator: Locator): Promise<void> {
     await locator.click();
     return;
   }
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 25 });
+  await glideTo(page, box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(300);
   await page.mouse.down();
   await page.waitForTimeout(90);
@@ -50,12 +70,12 @@ export async function installCursor(context: BrowserContext): Promise<void> {
       const style = document.createElement("style");
       style.textContent = `
         #__rec_cursor {
-          position: fixed; top: 0; left: 0; width: 20px; height: 20px;
+          position: fixed; top: 50%; left: 50%; width: 20px; height: 20px;
           border-radius: 50%; background: rgba(32, 33, 36, 0.4);
           border: 2px solid rgba(255, 255, 255, 0.95);
           box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
           z-index: 2147483647; pointer-events: none;
-          transform: translate(-50%, -50%); display: none;
+          transform: translate(-50%, -50%);
           transition: background 0.1s;
         }
         .__rec_ripple {
@@ -76,7 +96,6 @@ export async function installCursor(context: BrowserContext): Promise<void> {
       window.addEventListener(
         "mousemove",
         (e) => {
-          dot.style.display = "block";
           dot.style.left = `${e.clientX}px`;
           dot.style.top = `${e.clientY}px`;
         },
@@ -109,4 +128,18 @@ export async function installCursor(context: BrowserContext): Promise<void> {
       attach();
     }
   });
+}
+
+async function glideTo(page: Page, x: number, y: number): Promise<void> {
+  const from = position ?? { x, y };
+  const steps = Math.max(1, Math.round(TRAVEL_MS / STEP_MS));
+  for (let step = 1; step <= steps; step++) {
+    const progress = step / steps;
+    // Ease in and out, so the pointer accelerates away and settles on arrival.
+    const eased =
+      progress < 0.5 ? 2 * progress * progress : 1 - 2 * (1 - progress) * (1 - progress);
+    await page.mouse.move(from.x + (x - from.x) * eased, from.y + (y - from.y) * eased);
+    await page.waitForTimeout(STEP_MS);
+  }
+  position = { x, y };
 }
