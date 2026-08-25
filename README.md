@@ -49,6 +49,18 @@ pnpm record
 Every spec boots a fresh server container with randomized host ports and tears it
 down afterwards, so a locally running Music Assistant instance is not disturbed.
 
+Containers are labelled `ma-e2e-test=1`, and each run first removes any that an
+interrupted earlier run left behind. To do that by hand:
+
+```bash
+pnpm clean
+```
+
+The server downloads a beat-detection model on first boot and only finishes
+starting once it arrives, so the containers share a `ma-e2e-test-model-cache`
+volume for it. Expect a slow first boot on a fresh machine and a few seconds
+afterwards.
+
 ## CI
 
 One workflow ([e2e.yml](.github/workflows/e2e.yml)):

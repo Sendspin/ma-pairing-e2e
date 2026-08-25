@@ -10,7 +10,8 @@
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "test": "NODE_OPTIONS='--import tsx' playwright test",
-    "record": "RECORD=1 NODE_OPTIONS='--import tsx' playwright test && node scripts/collect-recordings.mjs"
+    "record": "RECORD=1 NODE_OPTIONS='--import tsx' playwright test && node scripts/collect-recordings.mjs",
+    "clean": "docker ps -aq --filter label=ma-e2e-test=1 | xargs -I{} docker rm -f {}"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

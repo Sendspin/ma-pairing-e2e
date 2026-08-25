@@ -7,6 +7,16 @@ const DEFAULT_IMAGE = "ghcr.io/music-assistant/server:beta";
 const WEB_PORT = 8095;
 const SENDSPIN_PORT = 8927;
 
+/** Marks containers as ours, so orphans of an interrupted run are findable. */
+export const CONTAINER_LABEL = "ma-e2e-test=1";
+
+/**
+ * Shared across containers: the server downloads a beat-detection model on
+ * first boot and only finishes starting once it lands, which takes minutes on
+ * a slow day. Persisting it keeps later boots at a few seconds.
+ */
+const MODEL_CACHE_VOLUME = "ma-e2e-test-model-cache";
+
 /**
  * One fresh Music Assistant server per spec, running as the official Docker
  * image with ephemeral state and randomized host ports.
@@ -27,10 +37,15 @@ export class MaServer {
 
   async start(): Promise<void> {
     const image = process.env.MA_IMAGE ?? DEFAULT_IMAGE;
+    await run("docker", ["volume", "create", MODEL_CACHE_VOLUME]);
     const { stdout } = await run("docker", [
       "run",
       "-d",
       "--rm",
+      "--label",
+      CONTAINER_LABEL,
+      "-v",
+      `${MODEL_CACHE_VOLUME}:/root/.cache/torch`,
       "-p",
       `127.0.0.1::${WEB_PORT}`,
       "-p",
@@ -64,7 +79,8 @@ export class MaServer {
     return Number(match[1]);
   }
 
-  private async waitForReady(timeoutMs = 120_000): Promise<void> {
+  // Generous, because a cold model cache adds minutes to the first boot.
+  private async waitForReady(timeoutMs = 300_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       try {

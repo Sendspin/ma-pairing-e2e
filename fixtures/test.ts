@@ -8,8 +8,8 @@ interface Fixtures {
 export const test = base.extend<Fixtures>({
   maServer: async ({}, use, testInfo) => {
     const server = new MaServer();
-    await server.start();
     try {
+      await server.start();
       await use(server);
     } finally {
       if (testInfo.status !== testInfo.expectedStatus) {
