@@ -1,5 +1,5 @@
 import type { BrowserContext } from "@playwright/test";
-import type { MaServer } from "./server.js";
+import type { ServerUnderTest } from "./server.js";
 
 export const ADMIN_USER = "admin";
 export const ADMIN_PASSWORD = "e2e-password-123";
@@ -10,7 +10,10 @@ export const ADMIN_PASSWORD = "e2e-password-123";
  * load lands in the app already logged in, with no login screen.
  * Returns the token for harness-side API calls.
  */
-export async function seededStart(server: MaServer, context: BrowserContext): Promise<string> {
+export async function seededStart(
+  server: ServerUnderTest,
+  context: BrowserContext,
+): Promise<string> {
   const res = await fetch(`${server.baseUrl}/setup`, {
     method: "POST",
     headers: { "content-type": "application/json" },

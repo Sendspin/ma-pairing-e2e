@@ -7,8 +7,7 @@ import { expect, test } from "../fixtures/test.js";
 const SPEAKER_NAME = "Living Room Speaker";
 
 test("pairing: dynamic PIN via the player picker", async ({ context, maServer }) => {
-  // All setup happens before the page (and with it the recording) starts:
-  // seed the admin, connect the speaker, wait until the server registered it.
+  // Setup happens before the page, and with it the recording, starts.
   const token = await seededStart(maServer, context);
   await human.installCursor(context);
   const speaker = new Speaker(maServer.sendspinBaseUrl, SPEAKER_NAME);
@@ -35,11 +34,15 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   // The picker lists players awaiting setup; clicking one launches its
   // setup flow.
   await human.click(page, pickerButton);
-  const speakerCard = page.locator("[data-player-id]").filter({ hasText: SPEAKER_NAME });
-  await expect(speakerCard).toBeVisible({ timeout: 15_000 });
-  await expect(speakerCard).toContainText("Setup required");
+  // An unpaired player's card action is labelled for configuring, not
+  // selecting, and says so in its accessible name.
+  const speakerAction = page.getByRole("button", {
+    name: new RegExp(`^Configure player: ${SPEAKER_NAME}`),
+  });
+  await expect(speakerAction).toBeVisible({ timeout: 15_000 });
+  await expect(speakerAction).toHaveAccessibleName(/Setup required/);
   await human.pause(page, 1_200);
-  await human.click(page, speakerCard.locator("button.player-select-action"));
+  await human.click(page, speakerAction);
 
   const dialog = page.getByRole("dialog", { name: "Set up player" });
   await expect(dialog).toBeVisible();
@@ -47,13 +50,14 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
 
   // The method-selection step is skipped by the server when the device
   // advertises only one usable method, so wait for either it or the PIN form.
-  const methodRadio = dialog.getByRole("radio", { name: /^(Dynamic )?PIN\b/ });
+  const methodButton = dialog.getByRole("button", { name: /^PIN\b/ });
   const pinField = dialog.getByLabel("PIN", { exact: true });
-  await expect(methodRadio.or(pinField).first()).toBeVisible({ timeout: 30_000 });
-  if (await methodRadio.isVisible()) {
-    await human.click(page, methodRadio);
-    await human.pause(page, 800);
-    await human.click(page, dialog.getByRole("button", { name: "Next" }));
+  await expect(methodButton.or(pinField).first()).toBeVisible({ timeout: 30_000 });
+  if (await methodButton.isVisible()) {
+    // A device that can pair by PIN does not offer its pairing token.
+    await expect(dialog.getByRole("button", { name: /Pairing token/ })).toHaveCount(0);
+    // Picking an option submits the step, so there is no separate Next click.
+    await human.click(page, methodButton);
   }
 
   // The PIN shows on the speaker; the operator copies it into the dialog.
@@ -68,20 +72,14 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   await human.pause(page, 1_500);
   await human.click(page, dialog.getByRole("button", { name: "Done" }));
 
-  // The paired speaker is now a selectable playback target.
-  await human.pause(page, 1_000);
-  await human.click(page, pickerButton);
-  await expect(speakerCard).toBeVisible({ timeout: 15_000 });
-  await expect(speakerCard).not.toContainText("Setup required");
-  await human.pause(page, 1_200);
-  await human.click(page, speakerCard.locator("button.player-select-action"));
+  // Finishing setup selects the freshly paired player, with no extra step.
   await expect(
     page.getByRole("button", {
       name: new RegExp(`^Select player: ${SPEAKER_NAME}`),
       expanded: false,
     }),
   ).toBeVisible({ timeout: 15_000 });
-  await human.pause(page, 2_000);
+  await human.pause(page, 2_500);
 
   // End of the recorded flow; the remaining checks are API/client-side.
   await page.close();

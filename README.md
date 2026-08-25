@@ -46,6 +46,20 @@ pnpm record
 | `MA_IMAGE` | `ghcr.io/music-assistant/server:beta`  | Server image to test against  |
 | `RECORD`   | unset                                  | Any value enables record mode |
 
+## Recording unreleased changes
+
+To record a server checkout, and optionally a frontend checkout, bake them into
+an image on top of a released one and point `MA_IMAGE` at the result:
+
+```bash
+node scripts/build-preview-image.mjs --server ../server --frontend ../frontend
+MA_IMAGE=ma-e2e-test:preview pnpm record
+```
+
+Running the checkouts this way rather than directly on the host keeps the
+container's isolated network, so the recording never picks up the speakers on
+your LAN.
+
 Every spec boots a fresh server container with randomized host ports and tears it
 down afterwards, so a locally running Music Assistant instance is not disturbed.
 

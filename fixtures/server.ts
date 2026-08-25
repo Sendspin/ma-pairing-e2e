@@ -10,6 +10,33 @@ const SENDSPIN_PORT = 8927;
 /** Marks containers as ours, so orphans of an interrupted run are findable. */
 export const CONTAINER_LABEL = "ma-e2e-test=1";
 
+/** What a spec needs from the server it runs against, however it is started. */
+export interface ServerUnderTest {
+  readonly baseUrl: string;
+  readonly sendspinBaseUrl: string;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  logs(): Promise<string>;
+}
+
+/** Poll until the server reports itself fully started, not merely reachable. */
+export async function waitForServerReady(baseUrl: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${baseUrl}/info`);
+      if (res.ok) {
+        const info = (await res.json()) as { status?: string };
+        if (info.status === "running") return;
+      }
+    } catch {
+      // server not up yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`server not ready within ${timeoutMs}ms`);
+}
+
 /**
  * Shared across containers: the server downloads a beat-detection model on
  * first boot and only finishes starting once it lands, which takes minutes on
@@ -81,21 +108,12 @@ export class MaServer {
 
   // Generous, because a cold model cache adds minutes to the first boot.
   private async waitForReady(timeoutMs = 300_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      try {
-        const res = await fetch(`${this.baseUrl}/info`);
-        if (res.ok) {
-          const info = (await res.json()) as { status?: string };
-          if (info.status === "running") return;
-        }
-      } catch {
-        // server not up yet
-      }
-      await new Promise((r) => setTimeout(r, 500));
+    try {
+      await waitForServerReady(this.baseUrl, timeoutMs);
+    } catch (err) {
+      const logs = await this.logs();
+      await this.stop();
+      throw new Error(`${(err as Error).message}. Container logs:\n${logs.slice(-4000)}`);
     }
-    const logs = await this.logs();
-    await this.stop();
-    throw new Error(`server not ready within ${timeoutMs}ms. Container logs:\n${logs.slice(-4000)}`);
   }
 }
