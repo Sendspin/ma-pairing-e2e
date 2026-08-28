@@ -4,7 +4,7 @@
 //
 //   node scripts/build-preview-image.mjs --server <checkout> --frontend <checkout>
 //
-// Then run against it:  MA_IMAGE=ma-e2e-test:preview pnpm record
+// Then run against it:  MA_IMAGE=ma-pairing-e2e:preview pnpm record
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +19,7 @@ const arg = (name, fallback) => {
 const serverDir = arg("server");
 const frontendDir = arg("frontend");
 const base = arg("base", "ghcr.io/music-assistant/server:nightly");
-const tag = arg("tag", "ma-e2e-test:preview");
+const tag = arg("tag", "ma-pairing-e2e:preview");
 if (!serverDir) {
   console.error("--server <path to server checkout> is required");
   process.exit(1);

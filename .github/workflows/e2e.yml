@@ -5,8 +5,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # Nightly regression signal against the beta channel, gated on the image
-    # digest actually having changed since the last tested one.
+    # Nightly regression signal, skipped when no new image shipped.
     - cron: "23 4 * * *"
   workflow_dispatch:
     inputs:
@@ -14,30 +13,56 @@ on:
         description: "Record mode: produce flow videos as artifacts"
         type: boolean
         default: false
+      image:
+        description: "Server image to run against"
+        type: string
+        default: ghcr.io/music-assistant/server:beta
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
+env:
+  MA_IMAGE: ${{ inputs.image || 'ghcr.io/music-assistant/server:beta' }}
+
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
-      run: ${{ steps.check.outputs.run }}
-      digest: ${{ steps.check.outputs.digest }}
+      run: ${{ steps.decide.outputs.run }}
+      key: ${{ steps.digest.outputs.key }}
     steps:
-      - name: Check whether a new beta image shipped
-        id: check
-        env:
-          LAST_TESTED_DIGEST: ${{ vars.LAST_TESTED_DIGEST }}
+      - name: Resolve the image digest
+        id: digest
         run: |
-          TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:music-assistant/server:pull" | jq -r .token)
-          DIGEST=$(curl -sI -H "Authorization: Bearer $TOKEN" \
+          ref="${MA_IMAGE##*:}"
+          repo="${MA_IMAGE#*/}"; repo="${repo%:*}"
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r .token)
+          digest=$(curl -fsSI -H "Authorization: Bearer $token" \
             -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-            "https://ghcr.io/v2/music-assistant/server/manifests/beta" \
+            "https://ghcr.io/v2/${repo}/manifests/${ref}" \
             | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:"{print $2}')
-          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ -n "$DIGEST" ] && [ "$DIGEST" = "$LAST_TESTED_DIGEST" ]; then
-            echo "beta digest unchanged ($DIGEST), skipping"
+          echo "key=tested-${digest:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "resolved $MA_IMAGE to ${digest:-unknown}"
+
+      # A marker cached under the digest means this exact image already passed.
+      - name: Look for a previous pass
+        id: seen
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tested-marker
+          key: ${{ steps.digest.outputs.key }}
+          lookup-only: true
+
+      - name: Decide whether to run
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ steps.seen.outputs.cache-hit }}" = "true" ]; then
+            echo "image unchanged since the last pass, skipping"
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -47,6 +72,7 @@ jobs:
     needs: gate
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -56,19 +82,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install chromium --with-deps
-      - name: Run specs
-        run: |
-          if [ "${{ inputs.record }}" = "true" ]; then
-            pnpm record
-          else
-            pnpm test
-          fi
+
+      - name: Run the specs
+        run: ${{ inputs.record && 'pnpm record' || 'pnpm test' }}
+
       - name: Upload recordings
-        if: inputs.record == true
+        if: ${{ inputs.record }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: recordings
           path: recordings/
+
       - name: Upload failure report
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -78,21 +102,13 @@ jobs:
             playwright-report/
             test-results/
 
-  remember-digest:
-    # Persist the tested digest so the next scheduled run can skip when
-    # nothing new shipped.
-    needs: [gate, e2e]
-    if: github.event_name == 'schedule' && needs.e2e.result == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Store tested digest
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DIGEST: ${{ needs.gate.outputs.digest }}
-        run: |
-          gh api -X PATCH "repos/${{ github.repository }}/actions/variables/LAST_TESTED_DIGEST" \
-            -f name=LAST_TESTED_DIGEST -f value="$DIGEST" \
-          || gh api -X POST "repos/${{ github.repository }}/actions/variables" \
-            -f name=LAST_TESTED_DIGEST -f value="$DIGEST"
+      # Remember this image passed, so the nightly can skip it.
+      - name: Record the pass
+        if: success() && github.event_name == 'schedule'
+        run: date -u +%FT%TZ > .tested-marker
+      - name: Cache the pass
+        if: success() && github.event_name == 'schedule'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tested-marker
+          key: ${{ needs.gate.outputs.key }}

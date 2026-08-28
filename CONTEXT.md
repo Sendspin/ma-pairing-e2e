@@ -22,7 +22,7 @@ and produces both regression signal and screen recordings.
   clicking through the Music Assistant UI.
 - **Speaker**: the Sendspin client device being paired. Played by the harness
   itself (headless client), not by real hardware.
-- **Dynamic PIN pairing**: the pairing method where the Speaker presents a PIN
+- **Dynamic PIN pairing**: the pairing method where the Speaker presents a code
   and the Operator enters it in Music Assistant. The canonical pairing Flow.
 - **Seeded start**: the state every non-onboarding Spec begins from: fresh
   Server under test with the first user created, onboarding marked complete,

@@ -85,7 +85,7 @@ export class Speaker {
     return new SendspinCore({
       baseUrl: this.baseUrl,
       clientName: this.name,
-      productName: "ma-e2e-test",
+      productName: "ma-pairing-e2e",
       codecs: ["pcm"],
       unpairedAccess: true,
       storage: storageAdapter,

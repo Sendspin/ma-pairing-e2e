@@ -8,7 +8,7 @@ const WEB_PORT = 8095;
 const SENDSPIN_PORT = 8927;
 
 /** Marks containers as ours, so orphans of an interrupted run are findable. */
-export const CONTAINER_LABEL = "ma-e2e-test=1";
+export const CONTAINER_LABEL = "ma-pairing-e2e=1";
 
 /** What a spec needs from the server it runs against, however it is started. */
 export interface ServerUnderTest {
@@ -42,7 +42,7 @@ export async function waitForServerReady(baseUrl: string, timeoutMs: number): Pr
  * first boot and only finishes starting once it lands, which takes minutes on
  * a slow day. Persisting it keeps later boots at a few seconds.
  */
-const MODEL_CACHE_VOLUME = "ma-e2e-test-model-cache";
+const MODEL_CACHE_VOLUME = "ma-pairing-e2e-model-cache";
 
 /**
  * One fresh Music Assistant server per spec, running as the official Docker

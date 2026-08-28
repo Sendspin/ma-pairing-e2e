@@ -6,3 +6,6 @@ recordings/
 
 # stray debug scripts
 *.tmp.mjs
+
+# CI marker
+.tested-marker

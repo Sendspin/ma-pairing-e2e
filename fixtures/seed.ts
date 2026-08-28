@@ -20,7 +20,7 @@ export async function seededStart(
     body: JSON.stringify({
       username: ADMIN_USER,
       password: ADMIN_PASSWORD,
-      device_name: "ma-e2e-test",
+      device_name: "ma-pairing-e2e",
     }),
   });
   if (!res.ok) {

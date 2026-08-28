@@ -1,5 +1,5 @@
 {
-  "name": "ma-e2e-test",
+  "name": "ma-pairing-e2e",
   "version": "0.0.0",
   "private": true,
   "description": "Recording-first e2e harness for Music Assistant: specs double as last-mile integration tests and produce screen recordings of user workflows.",
@@ -11,7 +11,7 @@
   "scripts": {
     "test": "NODE_OPTIONS='--import tsx' playwright test",
     "record": "RECORD=1 NODE_OPTIONS='--import tsx' playwright test && node scripts/collect-recordings.mjs",
-    "clean": "docker ps -aq --filter label=ma-e2e-test=1 | xargs -I{} docker rm -f {}"
+    "clean": "docker ps -aq --filter label=ma-pairing-e2e=1 | xargs -I{} docker rm -f {}"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
