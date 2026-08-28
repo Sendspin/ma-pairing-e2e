@@ -48,11 +48,21 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   await expect(dialog).toBeVisible();
   await human.pause(page, 1_200);
 
+  // A device that is new to Music Assistant is offered plain unpaired access
+  // first, so opt into pairing before the method steps.
+  const pairCheckbox = dialog.getByRole("checkbox", { name: "Pair this device" });
+  if (await pairCheckbox.isVisible().catch(() => false)) {
+    await human.click(page, pairCheckbox);
+    await human.pause(page, 700);
+    await human.click(page, dialog.getByRole("button", { name: "Next" }));
+    await human.pause(page, 900);
+  }
+
   // The method-selection step is skipped by the server when the device
-  // advertises only one usable method, so wait for either it or the PIN form.
+  // advertises only one usable method, so wait for either it or the code form.
   const methodButton = dialog.getByRole("button", { name: /^PIN\b/ });
-  const pinField = dialog.getByLabel("PIN", { exact: true });
-  await expect(methodButton.or(pinField).first()).toBeVisible({ timeout: 30_000 });
+  const codeBoxes = dialog.getByRole("textbox", { name: /Pairing code \d/ });
+  await expect(methodButton.or(codeBoxes.first()).first()).toBeVisible({ timeout: 30_000 });
   if (await methodButton.isVisible()) {
     // A device that can pair by PIN does not offer its pairing token.
     await expect(dialog.getByRole("button", { name: /Pairing token/ })).toHaveCount(0);
@@ -60,11 +70,11 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
     await human.click(page, methodButton);
   }
 
-  // The PIN shows on the speaker; the operator copies it into the dialog.
+  // The code shows on the speaker; the operator copies it into the dialog.
   const pin = await speaker.waitForPin();
-  await expect(pinField).toBeVisible({ timeout: 30_000 });
+  await expect(codeBoxes.first()).toBeVisible({ timeout: 30_000 });
   await human.pause(page, 1_000);
-  await human.type(page, pinField, pin);
+  await human.typeCode(page, codeBoxes, pin);
   await human.pause(page, 600);
   await human.click(page, dialog.getByRole("button", { name: "Next" }));
 

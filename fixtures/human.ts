@@ -59,6 +59,19 @@ export async function type(page: Page, locator: Locator, text: string): Promise<
 }
 
 /**
+ * Type a pairing code into a row of single-character boxes, which advance
+ * focus themselves as each character lands.
+ */
+export async function typeCode(page: Page, boxes: Locator, code: string): Promise<void> {
+  await click(page, boxes.first());
+  await pause(page, 250);
+  for (const character of code) {
+    await page.keyboard.type(character);
+    await pause(page, 260);
+  }
+}
+
+/**
  * In record mode, render a cursor dot that follows the (synthesized) mouse
  * and an expanding ripple on every click, so recordings read like a person
  * driving the app. No-op in test mode.
