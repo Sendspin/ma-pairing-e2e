@@ -18,9 +18,10 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
 
   const page = await context.newPage();
   await page.goto(maServer.baseUrl);
-  // The collapsed picker trigger carries aria-expanded; an open panel adds a
-  // second "Select player: ..." button, so match on the expanded state.
-  const pickerButton = page.getByRole("button", { name: /Select player/, expanded: false });
+  // The home page lists players with the same "Select player: ..." buttons,
+  // so take the picker trigger from the player bar.
+  const playerBar = page.getByRole("contentinfo");
+  const pickerButton = playerBar.getByRole("button", { name: /^Select player/ });
   await expect(pickerButton).toBeVisible({ timeout: 30_000 });
   await human.centerCursor(page);
 
@@ -44,24 +45,16 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   await human.pause(page, 1_200);
   await human.click(page, speakerAction);
 
-  const dialog = page.getByRole("dialog", { name: "Set up player" });
+  const dialog = page.getByRole("dialog").filter({
+    has: page.getByRole("heading", { name: `Set up ${SPEAKER_NAME}` }),
+  });
   await expect(dialog).toBeVisible();
   await human.pause(page, 1_200);
-
-  // A device that is new to Music Assistant is offered plain unpaired access
-  // first, so opt into pairing before the method steps.
-  const pairCheckbox = dialog.getByRole("checkbox", { name: "Pair this device" });
-  if (await pairCheckbox.isVisible().catch(() => false)) {
-    await human.click(page, pairCheckbox);
-    await human.pause(page, 700);
-    await human.click(page, dialog.getByRole("button", { name: "Next" }));
-    await human.pause(page, 900);
-  }
 
   // The method-selection step is skipped by the server when the device
   // advertises only one usable method, so wait for either it or the code form.
   const methodButton = dialog.getByRole("button", { name: /^PIN\b/ });
-  const codeBoxes = dialog.getByRole("textbox", { name: /Pairing code \d/ });
+  const codeBoxes = dialog.getByRole("textbox", { name: /code shown on the device's screen \d/ });
   await expect(methodButton.or(codeBoxes.first()).first()).toBeVisible({ timeout: 30_000 });
   if (await methodButton.isVisible()) {
     // A device that can pair by PIN does not offer its pairing token.
@@ -84,10 +77,7 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
 
   // Finishing setup selects the freshly paired player, with no extra step.
   await expect(
-    page.getByRole("button", {
-      name: new RegExp(`^Select player: ${SPEAKER_NAME}`),
-      expanded: false,
-    }),
+    playerBar.getByRole("button", { name: new RegExp(`^Select player: ${SPEAKER_NAME}`) }),
   ).toBeVisible({ timeout: 15_000 });
   await human.pause(page, 2_500);
 
