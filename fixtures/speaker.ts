@@ -9,9 +9,9 @@ export type SpeakerStorage = Map<string, string>;
 
 /**
  * The Speaker: a headless Sendspin client played by the harness process.
- * Connects unpaired (allowing unpaired access, like a factory-fresh device),
- * advertises dynamic-PIN pairing, and surfaces the PIN the server
- * negotiates with it.
+ * Connects unpaired and without offering unpaired access, so it needs pairing
+ * before it can play, advertises dynamic-PIN pairing, and surfaces the PIN
+ * the server negotiates with it.
  *
  * Pass the same storage map to a second instance to reconnect as the same
  * device (identity and long-term PSK live in storage).
@@ -87,7 +87,7 @@ export class Speaker {
       clientName: this.name,
       productName: "ma-pairing-e2e",
       codecs: ["pcm"],
-      unpairedAccess: true,
+      unpairedAccess: false,
       storage: storageAdapter,
       onPairing: (event: string) => {
         this.pairingEvents.push(event);
