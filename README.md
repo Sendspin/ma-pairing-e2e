@@ -15,7 +15,7 @@ test in CI can never drift apart, because they are the same script.
 
 | Flow | What it covers |
 | --- | --- |
-| Onboarding | First run: the create-admin page through to the app. |
+| Onboarding | First run: the setup wizard, from creating the admin account through to the app. |
 | Pairing | Pairing a Sendspin speaker by pairing code, driven from the player picker. |
 
 The speaker is not hardware. It is a headless [`@sendspin/sendspin-js`](https://www.npmjs.com/package/@sendspin/sendspin-js)
@@ -67,9 +67,9 @@ randomized host ports, then tears it down afterwards, so runs are isolated from
 each other and from any Music Assistant you have running locally.
 
 Only the onboarding spec walks the onboarding UI. Every other spec starts from
-a **seeded start**: the harness creates the first admin over `POST /setup` and
-injects the returned token, so the recording opens on the flow itself rather
-than on a login screen.
+a **seeded start**: the harness creates the first admin over `POST /setup`,
+marks onboarding complete and injects the returned token, so the recording
+opens on the flow itself rather than on a login screen.
 
 Two details worth knowing before you change a spec:
 
