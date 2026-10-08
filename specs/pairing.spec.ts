@@ -53,7 +53,7 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
 
   // The method-selection step is skipped by the server when the device
   // advertises only one usable method, so wait for either it or the code form.
-  const methodButton = dialog.getByRole("button", { name: /^PIN\b/ });
+  const methodButton = dialog.getByRole("button", { name: /^Pairing code\b/ });
   const codeBoxes = dialog.getByRole("textbox", { name: /code shown on the device's screen \d/ });
   await expect(methodButton.or(codeBoxes.first()).first()).toBeVisible({ timeout: 30_000 });
   if (await methodButton.isVisible()) {
