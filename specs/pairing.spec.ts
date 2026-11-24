@@ -36,12 +36,12 @@ test("pairing: dynamic PIN via the player picker", async ({ context, maServer })
   // setup flow.
   await human.click(page, pickerButton);
   // An unpaired player's card action is labelled for configuring, not
-  // selecting, and says so in its accessible name.
+  // selecting, and names the setup reason in its accessible name.
   const speakerAction = page.getByRole("button", {
     name: new RegExp(`^Configure player: ${SPEAKER_NAME}`),
   });
   await expect(speakerAction).toBeVisible({ timeout: 15_000 });
-  await expect(speakerAction).toHaveAccessibleName(/Setup required/);
+  await expect(speakerAction).toHaveAccessibleName(/Pairing required/);
   await human.pause(page, 1_200);
   await human.click(page, speakerAction);
 
