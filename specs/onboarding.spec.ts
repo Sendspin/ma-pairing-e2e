@@ -5,11 +5,17 @@ test("onboarding: create the admin account", async ({ context, maServer }) => {
   await human.installCursor(context);
   const page = await context.newPage();
 
-  // A fresh server opens the setup wizard on its create-account step.
+  // A fresh server opens the setup wizard on its welcome step.
   await page.goto(maServer.baseUrl);
   const wizard = page.getByRole("dialog", { name: "Set up Music Assistant" });
-  await expect(wizard.getByRole("heading", { name: "Create your account", level: 1 })).toBeVisible();
+  await expect(
+    wizard.getByRole("heading", { name: "Welcome to Music Assistant", level: 1 }),
+  ).toBeVisible();
   await human.centerCursor(page);
+  await human.pause(page, 1_500);
+  await human.click(page, wizard.getByRole("button", { name: "Get started", exact: true }));
+
+  await expect(wizard.getByRole("heading", { name: "Create your account", level: 1 })).toBeVisible();
   await human.pause(page, 1_200);
 
   await human.type(page, wizard.getByLabel("Username"), "admin");
@@ -18,24 +24,31 @@ test("onboarding: create the admin account", async ({ context, maServer }) => {
   await human.pause(page, 600);
   await human.click(page, wizard.getByRole("button", { name: "Create account" }));
 
-  // The remaining steps all have usable defaults, so walk them as offered.
-  for (const step of [
-    "Choose how you want to use Music Assistant",
-    "Add your music sources",
-    "Add your players",
-    "Add plugins",
-    "Check your server settings",
+  await expect(
+    wizard.getByRole("heading", { name: "How would you like to use Music Assistant?", level: 1 }),
+  ).toBeVisible({ timeout: 30_000 });
+  await human.pause(page, 1_500);
+  // Picking a setup choice moves on by itself, with no separate Next click.
+  await human.click(
+    page,
+    wizard.getByRole("button", { name: /^The full Music Assistant experience/ }),
+  );
+
+  // The remaining steps all have usable defaults or are optional, so walk them as offered.
+  for (const [step, action] of [
+    ["Add your music sources", "Next"],
+    ["Add your players", "Next"],
+    ["Connect Home Assistant", "Skip for now"],
+    ["Listen away from home", "Skip for now"],
+    ["Enrich Music Assistant with AI", "Skip for now"],
+    ["Add users", "Skip for now"],
   ]) {
     await expect(wizard.getByRole("heading", { name: step, level: 1 })).toBeVisible({
       timeout: 30_000,
     });
     await human.pause(page, 1_500);
-    await human.click(page, wizard.getByRole("button", { name: "Next" }));
+    await human.click(page, wizard.getByRole("button", { name: action, exact: true }));
   }
-
-  await expect(wizard.getByRole("heading", { name: "Add users", level: 1 })).toBeVisible();
-  await human.pause(page, 1_500);
-  await human.click(page, wizard.getByRole("button", { name: "Skip for now" }));
 
   await expect(wizard.getByRole("heading", { name: "Finish setup", level: 1 })).toBeVisible();
   await human.pause(page, 2_000);
